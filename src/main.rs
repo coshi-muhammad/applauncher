@@ -7,9 +7,11 @@ use egui::*;
 struct AppState {
     name: String,
     highlighted: u32,
+    search_pattern: String,
     items: Vec<Item>,
+    searched_list: Vec<Item>,
 }
-
+#[derive(Clone, Debug)]
 struct Item {
     name: String,
     launch_cmd: String,
@@ -47,46 +49,52 @@ impl Default for AppState {
         AppState {
             name: "launch app".to_owned(),
             highlighted: 0,
-            items: item_list,
+            search_pattern: "".to_owned(),
+            items: item_list.clone(),
+            searched_list: item_list.clone(),
         }
     }
 }
 
-fn show_item(ui: &mut egui::Ui, item: &Item, is_highlited: bool) -> bool {
+fn show_item(ui: &mut egui::Ui, item: &Item, highlited: bool) -> (bool, bool) {
     let mut clicked = false;
-    let frame: egui::Frame = if is_highlited {
-        let background_color = Color32::from_hex("#1e1e2e").unwrap_or(Color32::RED);
-        let border_color = Color32::from_hex("#8da9cb").unwrap_or(Color32::YELLOW);
-        let border = egui::Stroke::from((3.0, border_color));
-        egui::Frame::default().fill(background_color).stroke(border)
+    let mut hovered = false;
+    let background_color = if highlited {
+        Color32::from_hex("#1e1e2e").unwrap_or(Color32::RED)
     } else {
-        let background_color = Color32::from_hex("#181825").unwrap_or(Color32::RED);
-        let border_color = Color32::from_hex("#585858").unwrap_or(Color32::YELLOW);
-        let border = egui::Stroke::from((3.0, border_color));
-        egui::Frame::default().fill(background_color).stroke(border)
+        Color32::from_hex("#181825").unwrap_or(Color32::RED)
     };
+    let border_color = if highlited {
+        Color32::from_hex("#8da9cb").unwrap_or(Color32::YELLOW)
+    } else {
+        Color32::from_hex("#585858").unwrap_or(Color32::YELLOW)
+    };
+    let border = egui::Stroke::from((3.0, border_color));
+    let frame: egui::Frame = egui::Frame::default().fill(background_color).stroke(border);
 
     let layout = egui::Layout::top_down(egui::Align::Center).with_main_wrap(false);
     ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 0.0), layout, |ui| {
-        let frame_result = frame.show(ui, |ui| ui.label(item.name.clone()));
-        let interaction = ui.interact(
-            frame_result.response.rect,
-            frame_result.response.id.with("click_sense"),
-            egui::Sense::click(),
-        );
-        if interaction.hovered() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        let mut prepared_frame = frame.begin(ui);
+        {
+            prepared_frame.content_ui.label(item.name.clone());
         }
-        if interaction.clicked() {
+        let response = prepared_frame.allocate_space(ui);
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            hovered = true;
+        }
+        if response.clicked() {
             clicked = true;
         }
+        prepared_frame.paint(ui);
     });
-    clicked // rust wants to be haskell so bad they let you put a variable at the end without a
+    (clicked, hovered) // rust wants to be haskell so bad they let you put a variable at the end without a
     // semicolon to return it
 }
 
 fn launch_app(lauch_command: &str) {
     if lauch_command.starts_with("/usr/bin/flatpak") {
+        //HACK: for now its special cased untill i find a better way of dealing with it
         let paramaters: Vec<&str> = lauch_command.split(" ").collect();
         Command::new(paramaters[0])
             .arg(paramaters[1])
@@ -113,10 +121,28 @@ impl eframe::App for AppState {
         let mut should_close = false;
         //main loop
         // draw ui and handle widget specific events
+
         egui::CentralPanel::default_margins().show_inside(ui, |ui| {
-            let this: &AppState = self;
-            for (i, item) in (1..).zip(self.items.iter()) {
-                if show_item(ui, item, i == self.highlighted) {
+            let search_bar_response = ui.add(
+                egui::TextEdit::singleline(&mut self.search_pattern).hint_text("app name + enter"),
+            );
+
+            search_bar_response.request_focus();
+            if search_bar_response.changed() {
+                self.searched_list = self
+                    .items
+                    .iter()
+                    .filter(|item| item.name.starts_with(&self.search_pattern))
+                    .cloned()
+                    .collect();
+            }
+
+            for (i, item) in (1..).zip(self.searched_list.iter()) {
+                let (clicked, hovered) = show_item(ui, item, i == self.highlighted);
+                if hovered {
+                    self.highlighted = i;
+                }
+                if clicked {
                     println!("{} should launch", item.name);
                     launch_app(&item.launch_cmd);
                     self.highlighted = i;
@@ -133,20 +159,22 @@ impl eframe::App for AppState {
                 } else {
                     self.highlighted - 1
                 } as usize;
-                println!("{} should launch", self.items[lauched_item_idx].name);
-                //HACK: for now its special cased untill i find a better way of dealing with it
-                launch_app(&self.items[lauched_item_idx].launch_cmd);
+                println!(
+                    "{} should launch",
+                    self.searched_list[lauched_item_idx].name
+                );
+                launch_app(&self.searched_list[lauched_item_idx].launch_cmd);
                 should_close = true;
             }
             if input.key_pressed(egui::Key::Tab) || input.key_pressed(egui::Key::ArrowDown) {
                 self.highlighted += 1;
-                if self.highlighted > self.items.len() as u32 {
-                    self.highlighted -= (self.items.len() + 1) as u32;
+                if self.highlighted > self.searched_list.len() as u32 {
+                    self.highlighted -= (self.searched_list.len() + 1) as u32;
                 }
             }
             if input.key_pressed(egui::Key::ArrowUp) {
                 if self.highlighted == 0 {
-                    self.highlighted = self.items.len() as u32;
+                    self.highlighted = self.searched_list.len() as u32;
                 } else {
                     self.highlighted -= 1;
                 }
