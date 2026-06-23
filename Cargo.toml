@@ -4,5 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+criterion = {version = "0.8.2",features = ["html_reports"]} 
 eframe = "0.34.3"
 egui = "0.34.3"
+
+[[bench]]
+name = "loading_bench"
+harness = false
