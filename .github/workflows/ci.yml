@@ -64,15 +64,15 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
 
   test:
-    name: Test (${{ matrix.os }}, ${{ matrix.rust }})
-    runs-on: ${{ matrix.os }}
+    name: Test (${{ matrix.rust }})
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # Windows support is planned but not yet active. Once ready, just
-        # add "windows-latest" to this list — the GUI-deps step below is
-        # already a no-op on Windows since it's gated on Linux.
-        os: [ubuntu-latest, macos-latest]
+        # Windows support is planned but not yet active. Once ready, this
+        # job will need an `os` matrix dimension again (e.g.
+        # [ubuntu-latest, windows-latest]) with the Linux-only steps below
+        # gated on `runner.os == 'Linux'`.
         rust: [stable, beta]
 
     steps:
@@ -83,8 +83,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
 
-      - name: Install egui/eframe system dependencies (Linux)
-        if: runner.os == 'Linux'
+      - name: Install egui/eframe system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -104,18 +103,13 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.os }}-${{ matrix.rust }}
+          key: ${{ matrix.rust }}
 
       - name: Build
         run: cargo build --all-targets --verbose
 
-      - name: Run tests (Linux)
-        if: runner.os == 'Linux'
+      - name: Run tests
         run: xvfb-run -a cargo test --all-targets --verbose
-
-      - name: Run tests (non-Linux)
-        if: runner.os != 'Linux'
-        run: cargo test --all-targets --verbose
 
       - name: Run doc tests
         run: cargo test --doc --verbose
