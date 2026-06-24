@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fmt:
+    name: Format check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install egui/eframe system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev \
+            libxkbcommon-x11-0 \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libspeechd-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libgl1-mesa-dev \
+            libgtk-3-dev
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  test:
+    name: Test (${{ matrix.os }}, ${{ matrix.rust }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows support is planned but not yet active. Once ready, just
+        # add "windows-latest" to this list — the GUI-deps step below is
+        # already a no-op on Windows since it's gated on Linux.
+        os: [ubuntu-latest, macos-latest]
+        rust: [stable, beta]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Install egui/eframe system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev \
+            libxkbcommon-x11-0 \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libspeechd-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libgl1-mesa-dev \
+            libgtk-3-dev \
+            xvfb
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}-${{ matrix.rust }}
+
+      - name: Build
+        run: cargo build --all-targets --verbose
+
+      - name: Run tests (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a cargo test --all-targets --verbose
+
+      - name: Run tests (non-Linux)
+        if: runner.os != 'Linux'
+        run: cargo test --all-targets --verbose
+
+      - name: Run doc tests
+        run: cargo test --doc --verbose
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install egui/eframe system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev \
+            libxkbcommon-x11-0 \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libspeechd-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libgl1-mesa-dev \
+            libgtk-3-dev
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps --all-features --document-private-items
