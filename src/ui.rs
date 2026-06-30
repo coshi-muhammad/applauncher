@@ -44,9 +44,10 @@ fn show_item(ui: &mut egui::Ui, item: &Item, highlited: bool) -> (bool, bool) {
     ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 0.0), layout, |ui| {
         let mut prepared_frame = frame.begin(ui);
         {
-            //TODO: add the icon when there is one available
             if let Some(icon) = &item.icon {
                 ui.add(
+                    //TODO: find a way to dynamiclly change the size of the icon based on the size
+                    //of the item it self
                     egui::Image::new(format!("file://{icon}"))
                         .fit_to_exact_size(egui::vec2(16.0, 16.0)),
                 );
