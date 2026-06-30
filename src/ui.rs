@@ -3,7 +3,7 @@ use egui::*;
 use super::platform_layer::{Item, launch_app, load_items, search_item};
 
 pub struct AppState {
-    name: String,
+    _name: String,
     highlighted: u32,
     search_pattern: String,
     items: Vec<Item>,
@@ -15,7 +15,7 @@ impl Default for AppState {
         let item_list = load_items();
 
         AppState {
-            name: "launch app".to_owned(),
+            _name: "launch app".to_owned(),
             highlighted: 0,
             search_pattern: "".to_owned(),
             items: item_list.clone(),
@@ -44,9 +44,24 @@ fn show_item(ui: &mut egui::Ui, item: &Item, highlited: bool) -> (bool, bool) {
     ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 0.0), layout, |ui| {
         let mut prepared_frame = frame.begin(ui);
         {
+            //TODO: add the icon when there is one available
+            if let Some(icon) = &item.icon {
+                ui.add(
+                    egui::Image::new(format!("file://{icon}"))
+                        .fit_to_exact_size(egui::vec2(16.0, 16.0)),
+                );
+            } else {
+                ui.add(
+                    egui::Image::new(egui::include_image!("../assets/placeholder.png"))
+                        .fit_to_exact_size(egui::vec2(16.0, 16.0)),
+                );
+            }
             prepared_frame.content_ui.label(item.name.clone());
+            //TODO: add a symbol showing a terminal when there is one present and is set to true
         }
-        let response = prepared_frame.allocate_space(ui);
+        let response = prepared_frame
+            .allocate_space(ui)
+            .interact(egui::Sense::CLICK);
         if response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
             hovered = true;
@@ -61,8 +76,11 @@ fn show_item(ui: &mut egui::Ui, item: &Item, highlited: bool) -> (bool, bool) {
 }
 
 impl eframe::App for AppState {
-    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let mut should_close = false;
+        //HACK: not sure if i should put this here but this is the only way to get access to the
+        //context i know
+        egui_extras::install_image_loaders(ui.ctx());
         //main loop
         // draw ui and handle widget specific events
 
@@ -75,19 +93,20 @@ impl eframe::App for AppState {
             if search_bar_response.changed() {
                 self.searched_list = search_item(self.items.clone(), self.search_pattern.clone());
             }
-
-            for (i, item) in (1..).zip(self.searched_list.iter()) {
-                let (clicked, hovered) = show_item(ui, item, i == self.highlighted);
-                if hovered {
-                    self.highlighted = i;
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for (i, item) in (1..).zip(self.searched_list.iter()) {
+                    let (clicked, hovered) = show_item(ui, item, i == self.highlighted);
+                    if hovered {
+                        self.highlighted = i;
+                    }
+                    if clicked {
+                        println!("{} should launch", item.name);
+                        launch_app(item);
+                        self.highlighted = i;
+                        should_close = true;
+                    }
                 }
-                if clicked {
-                    println!("{} should launch", item.name);
-                    launch_app(item);
-                    self.highlighted = i;
-                    should_close = true;
-                }
-            }
+            });
         });
 
         //handle global key events and shortcuts

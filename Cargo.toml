@@ -5,9 +5,16 @@ edition = "2024"
 
 [dependencies]
 criterion = {version = "0.8.2",features = ["html_reports"]} 
+freedesktop-icon = "0.0.3"
 eframe = "0.34.3"
 egui = "0.34.3"
+egui_extras = { version = "*", features = ["all_loaders"] }
+image = { version = "*", features = [ "png"] }
 
 [[bench]]
 name = "loading_bench"
 harness = false
+
+[target.'cfg(target_os = "linux")']
+runner = "gf2"
+
